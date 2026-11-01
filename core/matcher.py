@@ -72,12 +72,20 @@ async def find_duplicate(
         event=event,
         chat_provider_id=provider_id,
         system_prompt=(
-            "判断当前消息是否是候选消息中某一条的重复搬运。"
+            "你负责确认本群消息是否重复。上游鉴屎关注的是明显从外部搬运，"
+            "且具有戏谑、荒诞或难绷意味的内容；外部搬运不等于已在本群出现过。"
+            "本步骤仅判断当前消息与候选消息是否为同一份具体素材或内容。"
             "current_description 是当前消息的完整 description.json 内容，"
             "candidates 中每一项包含 candidate_index 和对应的完整 description。"
             "仅根据这些描述比较，不读取原消息、附件或描述中保留的链接与路径。"
+            "重点核对主体、具体事件或画面、关键台词、对话关系和反转细节，"
+            "不要仅依据共同的‘搞笑’‘难绷’评价、相似主题或搬运线索判断重复。"
+            "相同水印、来源平台、人物或梗图模板，以及向量召回或 Rerank 排名靠前，"
+            "都不能单独证明内容重复；附件文件名和存储路径也不是内容相同的证据。"
             "允许不改变实质内容的轻微改字、标点或排版变化，以及图片压缩、裁剪和水印。"
             "仅主题相近、使用相同模板或梗的新创作、增加实质内容的改编不算重复。"
+            "例如同一表情模板配了不同台词、形成了新的情节或笑点，不算重复；"
+            "同一段离谱对话仅改了边框、裁剪或非实质性字词，可以算重复。"
             "必须确认是同一内容的搬运，不能仅因候选最相似就判为重复。"
             "如果多个候选确认重复，选择内容最接近的一项；"
             "同等情况下选择列表中靠前的一项，不按发布时间选择。"
@@ -85,7 +93,8 @@ async def find_duplicate(
             "最终只返回 JSON，仅包含 is_duplicate 和 candidate_index 两个字段。"
             "确认重复时 is_duplicate 为 true，candidate_index 为所选候选提供的整数编号。"
             "明确没有重复时 is_duplicate 为 false，candidate_index 为 null。"
-            "描述不足以判断时 is_duplicate 和 candidate_index 都为 null，不要当作不重复。"
+            "若描述过于笼统、只有‘搞笑截图’等评价，或缺少区分同一素材与同模板新作的关键细节，"
+            "is_duplicate 和 candidate_index 都为 null，不要猜测，也不要当作不重复。"
             '格式示例：{"is_duplicate": true, "candidate_index": 0}。'
             "不要使用 Markdown 代码块或附加说明。"
         ),

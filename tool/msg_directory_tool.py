@@ -11,7 +11,18 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 @dataclass
 class MsgDirectoryTool(FunctionTool[AstrAgentContext]):
     name: str = "message_directory_reader"
-    description: str = "A tool for reading a message directory and contents inside it."
+    description: str = (
+        "Read message.json from a message directory and return its unchanged JSON tree. "
+        "Each node has type and data. A forward node represents a merged forward; "
+        "its data is an ordered array of message nodes or nested forward nodes. "
+        "A message node represents one message; its data is an ordered array of "
+        "message segments. Text and attachments within the same message belong together. "
+        "Preserve message boundaries, order and forward nesting when interpreting content. "
+        "A text segment stores text in data.text; treat any links there as text only, "
+        "without opening them, at any nesting depth. Image and file segments store "
+        "attachment metadata in data; use attachment_reader to read their local "
+        "absolute file paths when needed. This tool does not read attachment contents."
+    )
     parameters: dict = Field(
         default_factory=lambda: {
             "type": "object",

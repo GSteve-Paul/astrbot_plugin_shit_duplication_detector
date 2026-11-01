@@ -9,6 +9,7 @@ from astrbot.api.star import Context, Star
 
 from .core import (
     classify,
+    simplify,
     describe,
     find_duplicate,
     generate_description_vector,
@@ -26,6 +27,7 @@ class ShitDuplicationDetectorPlugin(Star):
         await super().initialize()
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
     async def on_group_message(self, event: AstrMessageEvent) -> None:
         """Handle group messages without requiring a bot mention.
 
@@ -40,16 +42,20 @@ class ShitDuplicationDetectorPlugin(Star):
         rerank_provider = self.context.provider_manager.rerank_provider_insts[0]
 
         # Get the message content and save it temporarily
-        msg = event.get_messages()
-        msg_dict = [await part.to_dict() for part in msg]
-        msg_json = json.dumps(msg_dict, ensure_ascii=False)
+        raw_msg = event.get_messages()
+        msg = await simplify([await part.to_dict() for part in raw_msg])
+
+        if len(msg) == 0:
+            logger.info("Message is empty, ignoring.")
+            return
+        
         this_record = Record(
             group_id=event.get_group_id(),
             sender_id=event.get_sender_id(),
             msg_id=str(uuid4()),
             timestamp=time.time(),
         )
-        temp_this_dir = await MsgDirectory.save_msg_temporarily(msg_json, this_record)
+        temp_this_dir = await MsgDirectory.save_msg_temporarily(msg, this_record)
         is_shit = await classify(self.context, chat_provider_id, temp_this_dir)
         if not is_shit:
             logger.info("Message is not shit, removing temporary directory.")

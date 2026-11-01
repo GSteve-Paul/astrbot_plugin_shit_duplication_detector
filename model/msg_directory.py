@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 from pathlib import Path
+from typing import Any
 from urllib.parse import unquote, urlsplit
 
 from astrbot.api.star import StarTools
@@ -58,11 +59,13 @@ class MsgDirectory:
         return self.directory / "record.json"
 
     @classmethod
-    async def save_msg_temporarily(cls, msg_json: str, record: Record) -> MsgDirectory:
+    async def save_msg_temporarily(
+        cls, simplified_msg: dict, record: Record
+    ) -> MsgDirectory:
         """Save an incoming message in a temporary directory.
 
         Args:
-            msg_json: Unprocessed JSON string containing the message components.
+            simplified_msg: Simplified message tree whose links are updated in place.
             record: The record for the message.
 
         Returns:
@@ -70,16 +73,16 @@ class MsgDirectory:
         """
         data_dir = StarTools.get_data_dir("astrbot_plugin_shit_duplication_detector")
         directory = data_dir / f"group-{record.group_id}" / f"msg-temp-{record.msg_id}"
-        return await cls.save_msg(msg_json, record, directory)
+        return await cls.save_msg(simplified_msg, record, directory)
 
     @classmethod
     async def save_msg(
-        cls, msg_json: str, record: Record, directory: Path
+        cls, simplified_msg: dict, record: Record, directory: Path
     ) -> MsgDirectory:
-        """Save message JSON with absolute archived paths outside plain text.
+        """Save a simplified tree with absolute attachment paths in non-text leaves.
 
         Args:
-            msg_json: Unprocessed JSON string containing the message components.
+            simplified_msg: Simplified message tree whose links are updated in place.
             record: The message's group, sender, message ID and timestamp.
             directory: The path to the message's directory.
 
@@ -91,7 +94,7 @@ class MsgDirectory:
         record_file.write_text(
             json.dumps(vars(record), ensure_ascii=False, indent=2), encoding="utf-8"
         )
-        message = json.loads(msg_json)
+        message = simplified_msg
         msg_file = directory / "message.json"
         msg_file.write_text(
             json.dumps(message, ensure_ascii=False, indent=2), encoding="utf-8"
@@ -106,38 +109,46 @@ class MsgDirectory:
             re.IGNORECASE,
         )
         string_fields = []
+        links: dict[str, str] = {}
         pending = [message]
         while pending:
-            container = pending.pop()
-            if isinstance(container, dict):
-                # Plain components keep their text and links unchanged.
-                if container.get("type") == "text":
-                    continue
-                entries = container.items()
-            else:
-                entries = enumerate(container)
-            children = []
-            for key, value in entries:
-                if isinstance(value, (dict, list)):
-                    children.append(value)
-                elif isinstance(value, str):
-                    string_fields.append((container, key, value))
-            pending.extend(reversed(children))
+            node = pending.pop()
+            if node["type"] in {"forward", "message"}:
+                pending.extend(reversed(node["data"]))
+                continue
+            if node["type"] == "text":
+                continue
 
-        links = dict.fromkeys(
-            match.group()
-            for _, _, value in string_fields
-            for match in link_pattern.finditer(value)
-        )
+            # Only leaf data contains attachments; container metadata stays intact.
+            leaf_data = node["data"]
+            preferred_file = leaf_data.get("file", "")
+            pending_fields: list[Any] = [leaf_data]
+            while pending_fields:
+                container = pending_fields.pop()
+                if isinstance(container, dict):
+                    entries = container.items()
+                else:
+                    entries = enumerate(container)
+                children = []
+                for key, value in entries:
+                    if isinstance(value, (dict, list)):
+                        children.append(value)
+                    elif isinstance(value, str):
+                        string_fields.append((container, key, value))
+                        for match in link_pattern.finditer(value):
+                            links.setdefault(match.group(), preferred_file)
+                pending_fields.extend(reversed(children))
+
         replacements = {}
-        for raw_link in links:
+        for raw_link, preferred_file in links.items():
             link = raw_link.rstrip(".,;:!?)]}")
             ending = raw_link[len(link) :]
             download_target = None
             try:
                 parsed = urlsplit(link)
-                name = Path(unquote(parsed.path)).name
-                if not name or name == ".." or parsed.path.endswith("/"):
+                name_path = urlsplit(preferred_file or link).path
+                name = Path(unquote(name_path)).name
+                if not name or name == ".." or name_path.endswith("/"):
                     continue
                 target = attachments / name
                 if not target.is_file():
