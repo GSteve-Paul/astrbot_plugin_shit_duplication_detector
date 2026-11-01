@@ -1,0 +1,2 @@
+aiosqlite>=0.21.0
+sqlite-vec>=0.1.9
