@@ -3,7 +3,8 @@ import sqlite_vec
 
 from astrbot.api.star import StarTools
 
-async def init_vector_db(dimension: int) -> aiosqlite.Connection:
+
+async def init_shit_db(dimension: int) -> aiosqlite.Connection:
     """Open the vector database asynchronously and create its table if needed.
 
     Args:
@@ -14,7 +15,7 @@ async def init_vector_db(dimension: int) -> aiosqlite.Connection:
     """
     path = (
         StarTools.get_data_dir("astrbot_plugin_shit_duplication_detector")
-        / "vectors.sqlite3"
+        / "db.sqlite3"
     )
     db = await aiosqlite.connect(path)
     await db.enable_load_extension(True)
@@ -22,8 +23,8 @@ async def init_vector_db(dimension: int) -> aiosqlite.Connection:
     await db.enable_load_extension(False)
     async with db.execute(
         f"""
-        CREATE VIRTUAL TABLE IF NOT EXISTS message_vectors USING vec0(
-            msg_id TEXT PRIMARY KEY,
+        CREATE VIRTUAL TABLE IF NOT EXISTS shit_vectors USING vec0(
+            shit_id TEXT PRIMARY KEY,
             group_id TEXT,
             vector FLOAT[{dimension}] distance_metric=cosine
         )
@@ -33,34 +34,56 @@ async def init_vector_db(dimension: int) -> aiosqlite.Connection:
     return db
 
 
-async def insert_vector(
+async def insert_shit(
     db: aiosqlite.Connection,
     group_id: str,
-    msg_id: str,
-    vector: list[float],
+    shit_id: str,
+    shit_vector: list[float],
 ) -> None:
     """Insert and commit a vector asynchronously without replacing records.
 
     Args:
         db: The initialized vector database connection.
-        group_id: The group containing the message.
-        msg_id: The globally unique message UUID.
+        group_id: The group containing the content item.
+        shit_id: The globally unique content item UUID.
         vector: The embedding generated with the database's model and dimension.
     """
     async with db.execute(
-        "INSERT INTO message_vectors (msg_id, group_id, vector) VALUES (?, ?, ?)",
-        (msg_id, group_id, sqlite_vec.serialize_float32(vector)),
+        "INSERT INTO shit_vectors (shit_id, group_id, vector) VALUES (?, ?, ?)",
+        (shit_id, group_id, sqlite_vec.serialize_float32(shit_vector)),
     ):
         await db.commit()
 
 
-async def search_similar_vectors(
+async def update_shit(
+    db: aiosqlite.Connection,
+    shit_id: str,
+    shit_vector: list[float],
+) -> None:
+    """Update and commit the vector for an existing content item.
+
+    No rows are changed when the given ID does not exist.
+
+    Args:
+        db: The initialized vector database connection.
+        shit_id: The globally unique content item UUID to update.
+        vector: The replacement embedding using the database's model and dimension.
+    """
+    async with db.execute(
+        "UPDATE shit_vectors SET vector = ? WHERE shit_id = ?",
+        (sqlite_vec.serialize_float32(shit_vector), shit_id),
+    ):
+        await db.commit()
+
+
+async def search_similar_shits(
     db: aiosqlite.Connection,
     group_id: str,
-    vector: list[float],
+    shit_vector: list[float],
+    excluded_shit_id: str,
     limit: int = 5,
 ) -> list[tuple[str, str, float]]:
-    """Find the nearest message vectors within one group asynchronously.
+    """Find the nearest content item vectors within one group asynchronously.
 
     Args:
         db: The initialized vector database connection.
@@ -69,18 +92,22 @@ async def search_similar_vectors(
         limit: The maximum number of candidates to return.
 
     Returns:
-        Message UUID and cosine distance pairs in ascending distance order,
+        (group_id, shit_id, distance) tuples in ascending cosine distance order,
         or an empty list when the group has no records.
     """
     async with db.execute(
         """
-        SELECT group_id, msg_id, distance
-        FROM message_vectors
+        SELECT group_id, shit_id, distance
+        FROM shit_vectors
         WHERE vector MATCH ?
           AND group_id = ?
+          AND shit_id != ?
           AND k = ?
         ORDER BY distance ASC
         """,
-        (sqlite_vec.serialize_float32(vector), group_id, limit),
+        (sqlite_vec.serialize_float32(shit_vector), group_id, excluded_shit_id, limit),
     ) as cursor:
-        return [(group_id, msg_id, distance) for group_id, msg_id, distance in await cursor.fetchall()]
+        return [
+            (group_id, shit_id, distance)
+            for group_id, shit_id, distance in await cursor.fetchall()
+        ]

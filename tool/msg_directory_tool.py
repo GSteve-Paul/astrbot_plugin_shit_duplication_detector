@@ -12,7 +12,7 @@ from astrbot.core.astr_agent_context import AstrAgentContext
 class MsgDirectoryTool(FunctionTool[AstrAgentContext]):
     name: str = "message_directory_reader"
     description: str = (
-        "Read message.json from a message directory and return its unchanged JSON tree. "
+        "Read message_localized.json from a message directory and return its unchanged JSON tree. "
         "Each node has type and data. A forward node represents a merged forward; "
         "its data is an ordered array of message nodes or nested forward nodes. "
         "A message node represents one message; its data is an ordered array of "
@@ -41,16 +41,16 @@ class MsgDirectoryTool(FunctionTool[AstrAgentContext]):
         context: ContextWrapper[AstrAgentContext],
         **kwargs,
     ) -> ToolExecResult:
-        """Read the stored message JSON without changing its contents.
+        """Read the localized message JSON without changing its contents.
 
         Args:
             context: The agent's execution context.
             **kwargs: Tool arguments containing the message directory path.
 
         Returns:
-            The message JSON file contents.
+            The localized message JSON file contents.
         """
         path = str(kwargs.get("path"))
         directory = Path(path).resolve()
-        msg_file = directory / "message.json"
+        msg_file = directory / "message_localized.json"
         return msg_file.read_text(encoding="utf-8")

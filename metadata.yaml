@@ -1,7 +1,7 @@
 name: astrbot_plugin_shit_duplication_detector
 display_name: 鉴屎查重
 desc: 使用 AstrBot 模型识别 OneBot v11 群聊中的抽象内容、检测重复，并对搬运者进行傲娇吐槽。
-version: v1.0.0
+version: v2.1.0
 author: CSteve-Paul
 repo: https://github.com/GSteve-Paul/astrbot_plugin_shit_duplication_detector.git
 support_platforms:
