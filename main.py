@@ -21,6 +21,7 @@ class ShitDuplicationDetectorPlugin(Star):
 
     async def initialize(self) -> None:
         await super().initialize()
+        self.vector_db = None
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
     @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
@@ -34,7 +35,8 @@ class ShitDuplicationDetectorPlugin(Star):
         umo = event.unified_msg_origin
         chat_provider_id = await self.context.get_current_chat_provider_id(umo=umo)
         embedding_provider = self.context.get_all_embedding_providers()[0]
-        self.db = await init_shit_db(embedding_provider.get_dim())
+        if not self.vector_db:
+            self.vector_db = await init_shit_db(embedding_provider.get_dim())
         rerank_provider = self.context.provider_manager.rerank_provider_insts[0]
 
         # Get the message content and save it temporarily
@@ -50,6 +52,7 @@ class ShitDuplicationDetectorPlugin(Star):
             logger.info("Message is empty, ignoring.")
             return
 
+        # save msg and generate description for it
         temp_msg_dir = await MsgDirectory.save_msg_temporarily(msg)
         await temp_msg_dir.generate_description(
             self.context, chat_provider_id, embedding_provider
@@ -64,6 +67,7 @@ class ShitDuplicationDetectorPlugin(Star):
             None,
         )
 
+        # Check if the message is a supplement to an existing partial shit directories 
         shit_dir_need_check = None
         shit_vector = None
         if partial_shit_dir:
@@ -73,14 +77,14 @@ class ShitDuplicationDetectorPlugin(Star):
             if same is True:
                 partial_shit_dir.append_msg(temp_msg_dir)
                 shit_vector = await partial_shit_dir.update_vector(
-                    self.db, embedding_provider
+                    self.vector_db, embedding_provider
                 )
                 shit_dir_need_check = partial_shit_dir
             elif same is False:
                 partial_shit_dir.release_shit()
                 new_partial_shit_dir = ShitDirectory.save_shit_temporarily(temp_msg_dir)
                 shit_vector = await new_partial_shit_dir.insert_vector(
-                    self.db, embedding_provider
+                    self.vector_db, embedding_provider
                 )
                 shit_dir_need_check = new_partial_shit_dir
             else:
@@ -90,16 +94,17 @@ class ShitDuplicationDetectorPlugin(Star):
             if is_shit:
                 new_partial_shit_dir = ShitDirectory.save_shit_temporarily(temp_msg_dir)
                 shit_vector = await new_partial_shit_dir.insert_vector(
-                    self.db, embedding_provider
+                    self.vector_db, embedding_provider
                 )
                 shit_dir_need_check = new_partial_shit_dir
 
+        # check for duplicates if we update or create a shit directory
         if shit_dir_need_check and shit_vector:
             dup_shit_dir = await find_duplicate(
                 self.context,
                 chat_provider_id,
                 rerank_provider,
-                self.db,
+                self.vector_db,
                 shit_dir_need_check,
                 shit_vector,
             )
@@ -114,6 +119,7 @@ class ShitDuplicationDetectorPlugin(Star):
                     event.chain_result([At(qq=record.sender_id), Plain(reply)])
                 )
             else:
+                # check for duplicate messages if no duplicate shit directory is found
                 dup_shit_msg = await find_duplicate_msg(
                     self.context, chat_provider_id, shit_dir_need_check
                 )
@@ -129,11 +135,12 @@ class ShitDuplicationDetectorPlugin(Star):
                         this_dir=latest_msg_dir,
                     )
                     shit_dir_need_check.pop_msg()
-                    await shit_dir_need_check.update_vector(self.db, embedding_provider)
+                    await shit_dir_need_check.update_vector(self.vector_db, embedding_provider)
                     await event.send(
                         event.chain_result([At(qq=record.sender_id), Plain(reply)])
                     )
 
     async def terminate(self) -> None:
-        await self.db.close()
+        if self.vector_db:
+            await self.vector_db.close()
         await super().terminate()

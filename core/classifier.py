@@ -26,7 +26,8 @@ async def classify(
         msg_dir: The directory of the message to classify.
 
     Returns:
-        Whether the message is clearly reposted humorous or absurd content.
+        Whether the message is clearly reposted humorous or absurd content,
+        excluding standalone reaction memes or stickers.
 
     Raises:
         ValueError: The model returns invalid JSON or an uncertain decision.
@@ -41,14 +42,19 @@ async def classify(
             "你是 QQ 群的鉴屎员。这里的“屎”必须同时满足两个条件："
             "一、从提供的消息描述中能看出明显的外部搬运、转引或转载线索；"
             "二、被搬运的内容本身具有明显的戏谑、恶搞、荒诞、反差或令人难绷的意味。"
+            "优先排除规则：单独一个表情包不算屎，is_shit 必须为 false；"
+            "即便它很搞笑、含有配字、明显从外部搬来或带有水印，也不能判为屎。"
+            "按消息整体内容判断，不能把所有单张图片都当成表情包；"
+            "有具体事件或对话内容的聊天截图、帖子中出现表情包，不会仅因此排除整份素材。"
             "本步骤只判断是否属于这类内容，不判断它是否已在本群出现过。"
             "搬运线索可以是截图中的外部帖子、评论区或聊天片段，明确的转引标记、"
-            "来源水印，或作为独立素材转发的现成梗图、段子。"
+            "来源水印，或作为独立素材转发的帖子、段子；这些线索不改变上述表情包排除规则。"
             "必须结合实际内容判断；仅有 image、file、forward 类型、使用流行词、"
             "看起来好笑，或者带有文件路径，都不足以自动认定为外部搬运。"
             "不要凭印象声称见过原作，也不要编造来源平台、原作者或传播经历。"
-            "搬来的离谱聊天截图、带反转的网络段子、戏谑恶搞的转载梗图可判为 true。"
-            "现场原创玩梗、普通接梗和用表情表达当前情绪，若没有明显搬运素材则判为 false；"
+            "搬来的离谱聊天截图、带反转的网络段子、包含具体事件的戏谑恶搞帖子可判为 true。"
+            "现场原创玩梗、普通接梗若没有明显搬运素材则判为 false；"
+            "单独发送一个表情包，无论是否存在搬运线索，都判为 false。"
             "搬运的正常新闻、知识资料、通知或严肃讨论，若缺少戏谑或难绷内容也判为 false。"
             "负面、悲伤、冒犯或敏感本身不等于难绷，不要强行将严肃内容解释成笑话。"
             "message_description 是该消息完整的 description.json 文本，"
@@ -102,8 +108,9 @@ async def classify_supplement(
         msg_dir: The saved incoming message directory.
 
     Returns:
-        None for ordinary content, True for the same content item, or False
-        for a separate reposted humorous or absurd item.
+        None for ordinary content or a standalone reaction meme or sticker,
+        True for the same content item, or False for a separate reposted
+        humorous or absurd item.
 
     Raises:
         ValueError: The model returns invalid JSON or an uncertain decision.
@@ -121,6 +128,11 @@ async def classify_supplement(
         system_prompt=(
             "你负责判断新消息是否是给定已有‘屎’的后续或补充。"
             "这里的‘屎’指明显从其他地方搬运，并具有戏谑、恶搞、荒诞、反差或难绷意味的内容。"
+            "优先排除规则：新消息若只是单独一个表情包，即便搞笑、有配字、"
+            "有外部搬运痕迹或与前文情绪契合，也不算屎，必须返回 decision=null。"
+            "不能因为已有屎正在收集中，就把这个表情包当作同一份素材的补充或另一份屎。"
+            "不能把所有单张图片都当成表情包；具体聊天截图或帖子中含有表情包，"
+            "应结合整体内容判断，而不是直接排除整份素材。"
             "一份搬运素材可能拆成连续的多条消息；已有内容已被归为屎。"
             "existing_shit.metadata 是已有内容的元数据；descriptions 是按 msg_ids 顺序排列的"
             "字符串数组，每个字符串是其中一条消息的完整描述 JSON。"
@@ -132,7 +144,8 @@ async def classify_supplement(
             "只比较给定的描述与元数据，不读取双方的原消息文件、附件或其他文件。"
             "元数据和描述中的 link_to、文件名、路径及链接，包括 type=text 中的链接，"
             "仅作为文本，不打开、不追踪，也不根据它们猜测未描述的内容。"
-            "必须结合已有内容判断新消息，不要求新消息单独看也能构成完整的屎。"
+            "除上述单个表情包排除情形外，必须结合已有内容判断新消息，"
+            "不要求新消息单独看也能构成完整的屎。"
             "decision=true：新消息属于同一份具体搬运素材，或直接补充它所需的信息；"
             "例如同一段聊天截图的下一张、同一帖子或故事的后半段、承接前文的关键台词、"
             "对该素材中人物或事件的具体背景说明。补充可以增加实质信息，"
