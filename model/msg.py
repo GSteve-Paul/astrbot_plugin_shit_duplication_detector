@@ -30,20 +30,23 @@ class Record:
         group_id: str,
         sender_id: str,
         msg_id: str,
-        timestamp: float,
+        timestamp: int,
     ) -> None:
         """Store the metadata of a message.
+
+        Normalize fractional timestamps from older records to whole seconds.
 
         Args:
             group_id: The ID of the group the message is from.
             sender_id: The ID of the sender of the message.
-            msg_id: The unique ID of the message.
-            timestamp: The timestamp of when the message was received.
+            msg_id: The platform-provided message ID as a string.
+            timestamp: The AstrBot message object's timestamp in integer
+                Unix seconds.
         """
         self.group_id = group_id
         self.sender_id = sender_id
         self.msg_id = msg_id
-        self.timestamp = timestamp
+        self.timestamp = int(timestamp)
 
 
 class Msg(dict[str, Any]):
