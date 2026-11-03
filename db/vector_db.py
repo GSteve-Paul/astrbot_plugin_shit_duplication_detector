@@ -76,6 +76,25 @@ async def update_shit(
         await db.commit()
 
 
+async def delete_shit(
+    db: aiosqlite.Connection,
+    shit_id: str,
+) -> None:
+    """Delete and commit the vector for a content item.
+
+    No rows are changed when the given ID does not exist.
+
+    Args:
+        db: The initialized vector database connection.
+        shit_id: The globally unique content item UUID to delete.
+    """
+    async with db.execute(
+        "DELETE FROM shit_vectors WHERE shit_id = ?",
+        (shit_id,),
+    ):
+        await db.commit()
+
+
 async def search_similar_shits(
     db: aiosqlite.Connection,
     group_id: str,

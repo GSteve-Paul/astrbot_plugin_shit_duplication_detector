@@ -28,6 +28,10 @@ class ShitDuplicationDetectorPlugin(Star):
     async def on_group_message(self, event: AstrMessageEvent) -> None:
         """Handle group messages without requiring a bot mention.
 
+        For a duplicate item, generate the reply before deleting the current
+        partial item's vector, symbolic link and directory. Preserve the matched
+        historical item and send the reply after cleanup.
+
         Args:
             event: Incoming AstrBot message event.
         """
@@ -68,7 +72,7 @@ class ShitDuplicationDetectorPlugin(Star):
             None,
         )
 
-        # Check if the message is a supplement to an existing partial shit directories 
+        # Check if the message is a supplement to an existing partial shit directories
         shit_dir_need_check = None
         shit_vector = None
         if partial_shit_dir:
@@ -110,13 +114,15 @@ class ShitDuplicationDetectorPlugin(Star):
                 shit_vector,
             )
             if dup_shit_dir:
-                reply = await generate_roast_reply(
+               reply = await generate_roast_reply(
                     self.context,
                     chat_provider_id,
                     original_dir=dup_shit_dir,
                     this_dir=shit_dir_need_check,
                 )
-                await event.send(
+               await shit_dir_need_check.delete_vector(self.vector_db)
+               await shit_dir_need_check.remove_shit()
+               await event.send(
                     event.chain_result([At(qq=record.sender_id), Plain(reply)])
                 )
             else:
@@ -136,7 +142,9 @@ class ShitDuplicationDetectorPlugin(Star):
                         this_dir=latest_msg_dir,
                     )
                     shit_dir_need_check.pop_msg()
-                    await shit_dir_need_check.update_vector(self.vector_db, embedding_provider)
+                    await shit_dir_need_check.update_vector(
+                        self.vector_db, embedding_provider
+                    )
                     await event.send(
                         event.chain_result([At(qq=record.sender_id), Plain(reply)])
                     )

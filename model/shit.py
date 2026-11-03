@@ -29,6 +29,8 @@ class ShitDirectory:
     Partial items live in partial_shits and have symbolic links in shits.
     Creation adds the symbolic link. release_shit replaces it with a directory
     containing the moved messages and updates paths in the description list.
+    To discard a partial item, call delete_vector before remove_shit, which
+    deletes its symbolic link and directory contents.
 
     Attributes:
         directory: Absolute directory path with symbolic links left unresolved.
@@ -270,6 +272,25 @@ class ShitDirectory:
         shutil.rmtree(self.directory)
         return released
 
+    async def remove_shit(self) -> None:
+        """Remove a partial item's symbolic link and its entire directory.
+
+        Call on the actual partial directory, not its link or a released item.
+        Read link_to from metadata.json and unlink it before removing the
+        directory, including all messages and attachments. Delete the vector
+        separately with delete_vector before calling this method, while the
+        metadata file still exists.
+
+        Raises:
+            AssertionError: This object's directory is a symbolic link.
+            OSError: Reading metadata, unlinking or removing the directory fails.
+        """
+        assert not self.directory.is_symlink()
+
+        link_to = Path(self.get_metadata()["link_to"]).absolute()
+        link_to.unlink()
+        shutil.rmtree(self.directory)
+
     async def insert_vector(
         self,
         db: aiosqlite.Connection,
@@ -320,3 +341,19 @@ class ShitDirectory:
         vector = await embedding_provider.get_embedding(text)
         await vector_db.update_shit(db, shit_id, vector)
         return vector
+
+    async def delete_vector(
+        self,
+        db: aiosqlite.Connection,
+    ) -> None:
+        """Delete and commit this item's vector using its saved metadata.
+
+        Keep the directory and symbolic link intact. Call before remove_shit
+        because the item ID is read from metadata.json. A missing database
+        record is ignored.
+
+        Args:
+            db: The initialized vector database connection.
+        """
+        shit_id = self.get_metadata()["shit_id"]
+        await vector_db.delete_shit(db, shit_id)
