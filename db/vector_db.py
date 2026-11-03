@@ -7,30 +7,39 @@ from astrbot.api.star import StarTools
 async def init_shit_db(dimension: int) -> aiosqlite.Connection:
     """Open the vector database asynchronously and create its table if needed.
 
+    Close the connection if setup fails or is cancelled before it can be
+    returned to the caller.
+
     Args:
         dimension: Embedding dimension used when creating the table.
 
     Returns:
-        The open connection, which the caller owns and must close with await.
+        A new connection owned by the caller, which must close it with await
+        when the current message finishes, including on failure or cancellation.
     """
     path = (
         StarTools.get_data_dir("astrbot_plugin_shit_duplication_detector")
         / "db.sqlite3"
     )
     db = await aiosqlite.connect(path)
-    await db.enable_load_extension(True)
-    await db.load_extension(sqlite_vec.loadable_path())
-    await db.enable_load_extension(False)
-    async with db.execute(
-        f"""
-        CREATE VIRTUAL TABLE IF NOT EXISTS shit_vectors USING vec0(
-            shit_id TEXT PRIMARY KEY,
-            group_id TEXT,
-            vector FLOAT[{dimension}] distance_metric=cosine
-        )
-        """
-    ):
-        await db.commit()
+    try:
+        await db.enable_load_extension(True)
+        await db.load_extension(sqlite_vec.loadable_path())
+        await db.enable_load_extension(False)
+        async with db.execute(
+            f"""
+            CREATE VIRTUAL TABLE IF NOT EXISTS shit_vectors USING vec0(
+                shit_id TEXT PRIMARY KEY,
+                group_id TEXT,
+                vector FLOAT[{dimension}] distance_metric=cosine
+            )
+            """
+        ):
+            await db.commit()
+    except BaseException:
+        # Include task cancellation when cleaning up a partially initialized DB.
+        await db.close()
+        raise
     return db
 
 
