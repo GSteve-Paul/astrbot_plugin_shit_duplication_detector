@@ -24,7 +24,7 @@ class ShitDuplicationDetectorPlugin(Star):
         self.vector_db = None
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP)
+    @filter.platform_adapter_type(filter.PlatformAdapterType.AIOCQHTTP, priority=100)
     async def on_group_message(self, event: AstrMessageEvent) -> None:
         """Handle group messages without requiring a bot mention.
 
@@ -50,6 +50,7 @@ class ShitDuplicationDetectorPlugin(Star):
         msg = await Msg.from_raw([await part.to_dict() for part in raw_msg], record)
         if len(msg) == 0:
             logger.info("Message is empty, ignoring.")
+            event.stop_event()
             return
 
         # save msg and generate description for it
@@ -139,6 +140,7 @@ class ShitDuplicationDetectorPlugin(Star):
                     await event.send(
                         event.chain_result([At(qq=record.sender_id), Plain(reply)])
                     )
+        event.stop_event()
 
     async def terminate(self) -> None:
         if self.vector_db:
